@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
-import time
+from datetime import datetime, timedelta
 
 # Настройка страницы
 st.set_page_config(page_title="Дашборд расходов", layout="wide")
@@ -30,74 +29,104 @@ CATEGORY_COLORS = {
     'Комиссия банка': '#E17055'
 }
 
-# Функция загрузки данных с диагностикой
+# Инициализация session state для дат
+if 'start_date' not in st.session_state:
+    st.session_state.start_date = None
+if 'end_date' not in st.session_state:
+    st.session_state.end_date = None
+
+# Функция загрузки данных
 @st.cache_data(ttl=300)
 def load_data():
     try:
         df = pd.read_csv(SHEET_URL)
-        
-        # 1. Проверяем названия колонок (частая ошибка - лишние пробелы)
-        df.columns = df.columns.str.strip() 
-        
-        # 2. Преобразуем дату
-        # dayfirst=True важен для формата ДД.ММ.ГГГГ
+        df.columns = df.columns.str.strip()
         df['Дата'] = pd.to_datetime(df['Дата'], dayfirst=True, errors='coerce')
-        
-        # 3. Преобразуем сумму
         df['Сумма'] = pd.to_numeric(df['Сумма'], errors='coerce')
-        
-        # Удаляем строки, где сумма не число
         df = df.dropna(subset=['Сумма'])
-        
         return df
     except Exception as e:
-        st.error(f"❌ Критическая ошибка загрузки: {e}")
+        st.error(f"❌ Ошибка загрузки: {e}")
         return None
 
 # Загрузка данных
 df = load_data()
 
-# Проверка 1: Загрузился ли DataFrame вообще?
 if df is None or df.empty:
     st.stop()
 
-# Проверка 2: Распознал ли Python даты?
 if df['Дата'].isnull().all():
-    st.error("❌ Не удалось прочитать даты. Проверьте, что в Google Таблице колонка 'Дата' имеет формат ДД.ММ.ГГГГ.")
-    st.write("Первые 5 строк сырых данных:", df.head())
+    st.error("❌ Не удалось прочитать даты.")
     st.stop()
 
 # === БОКОВАЯ ПАНЕЛЬ И ФИЛЬТРЫ ===
 st.sidebar.header("🔍 Фильтры")
 
-min_date = df['Дата'].min()
-max_date = df['Дата'].max()
+# Быстрый выбор периода
+st.sidebar.subheader("Быстрый выбор:")
+
+col1, col2, col3 = st.sidebar.columns(3)
+
+with col1:
+    if st.button("День", use_container_width=True):
+        last_date = df['Дата'].max().date()
+        st.session_state.start_date = last_date
+        st.session_state.end_date = last_date
+
+with col2:
+    if st.button("Неделя", use_container_width=True):
+        last_date = df['Дата'].max().date()
+        st.session_state.start_date = last_date - timedelta(days=6)
+        st.session_state.end_date = last_date
+
+with col3:
+    if st.button("Всё время", use_container_width=True):
+        st.session_state.start_date = df['Дата'].min().date()
+        st.session_state.end_date = df['Дата'].max().date()
+
+# Установка начальных значений, если еще не выбраны
+if st.session_state.start_date is None:
+    st.session_state.start_date = df['Дата'].min().date()
+if st.session_state.end_date is None:
+    st.session_state.end_date = df['Дата'].max().date()
+
+# Ручной выбор дат
+st.sidebar.subheader("Диапазон дат:")
+
+min_date = df['Дата'].min().date()
+max_date = df['Дата'].max().date()
 
 start_date = st.sidebar.date_input(
-    "Дата начала", 
-    value=min_date.date(), 
-    min_value=min_date.date(), 
-    max_value=max_date.date()
+    "",
+    value=st.session_state.start_date,
+    min_value=min_date,
+    max_value=max_date,
+    key="start_date_input"
 )
 
 end_date = st.sidebar.date_input(
-    "Дата окончания", 
-    value=max_date.date(), 
-    min_value=min_date.date(), 
-    max_value=max_date.date()
+    "",
+    value=st.session_state.end_date,
+    min_value=min_date,
+    max_value=max_date,
+    key="end_date_input"
 )
 
-# Превращаем date обратно в timestamp для корректного сравнения
-start_ts = pd.Timestamp(start_date)
-end_ts = pd.Timestamp(end_date) + pd.Timedelta(days=1) # +1 день чтобы захватить весь последний день
+# Обновляем session state при ручном изменении
+st.session_state.start_date = start_date
+st.session_state.end_date = end_date
 
+# Фильтры категорий и источников
 categories = sorted(df['Категория расходов'].dropna().unique())
 selected_categories = st.sidebar.multiselect("Категории расходов", options=categories, default=categories)
 
 sources = sorted(df['Источник данных'].dropna().unique())
 selected_sources = st.sidebar.multiselect("Источник данных", options=sources, default=sources)
 
-# Применение фильтров (безопасное сравнение через Timestamp)
+# Применение фильтров
+start_ts = pd.Timestamp(st.session_state.start_date)
+end_ts = pd.Timestamp(st.session_state.end_date) + pd.Timedelta(days=1)
+
 mask = (
     (df['Дата'] >= start_ts) & 
     (df['Дата'] < end_ts) &
@@ -106,10 +135,8 @@ mask = (
 )
 df_filtered = df[mask].copy()
 
-# Проверка 3: Остались ли данные после фильтров?
 if df_filtered.empty:
-    st.warning(f"⚠️ Нет данных за период {start_date} - {end_date} с выбранными фильтрами.")
-    st.info("💡 Попробуйте сбросить фильтры или расширить даты.")
+    st.warning(f"⚠️ Нет данных за период {st.session_state.start_date} - {st.session_state.end_date} с выбранными фильтрами.")
     st.stop()
 
 # === БАЗОВЫЕ МЕТРИКИ ===
