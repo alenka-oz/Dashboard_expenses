@@ -90,31 +90,24 @@ if st.session_state.start_date is None:
 if st.session_state.end_date is None:
     st.session_state.end_date = df['Дата'].max().date()
 
-# Ручной выбор дат
+# Ручной выбор дат (одним диапазоном)
 st.sidebar.subheader("Диапазон дат:")
 
 min_date = df['Дата'].min().date()
 max_date = df['Дата'].max().date()
 
-start_date = st.sidebar.date_input(
+date_range = st.sidebar.date_input(
     "",
-    value=st.session_state.start_date,
+    value=(st.session_state.start_date, st.session_state.end_date),
     min_value=min_date,
     max_value=max_date,
-    key="start_date_input"
-)
-
-end_date = st.sidebar.date_input(
-    "",
-    value=st.session_state.end_date,
-    min_value=min_date,
-    max_value=max_date,
-    key="end_date_input"
+    key="date_range_input"
 )
 
 # Обновляем session state при ручном изменении
-st.session_state.start_date = start_date
-st.session_state.end_date = end_date
+if date_range:
+    st.session_state.start_date = date_range[0]
+    st.session_state.end_date = date_range[1]
 
 # Фильтры категорий и источников
 categories = sorted(df['Категория расходов'].dropna().unique())
