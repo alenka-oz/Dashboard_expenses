@@ -8,7 +8,7 @@ st.set_page_config(page_title="Дашборд расходов", layout="wide")
 st.title("📊 Дашборд расходов")
 
 # URL Google Sheets (CSV экспорт)
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTwJ9I4ekS5M7N30T8__ygyRsjrg2U_30IyM8Xc8QVXtZSd52PpAysNwhSNSH7fmagfy5ZOu_EJayAz/pub?gid=0&single=true&output=csv"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRMQeqJvNgFQZ7h73KNVv70fNfE0o_taQkxOJSjrIPaodxY5S3RcvV1gLSfI153rx9Qmzd0tS-NycLx/pub?output=csv"
 
 # Закрепленные цвета для категорий
 CATEGORY_COLORS = {
